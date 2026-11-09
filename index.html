@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>搶答大作戰</title>
+<meta name="description" content="課堂即時搶答遊戲：老師主持、學生用手機作答，免安裝、免帳號。">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#46178f; --bg2:#2d0e63; --card:#fff; --ink:#1f1a33; --muted:#6b6485;
+  --c0:#e21b3c; --c1:#1368ce; --c2:#d89e00; --c3:#26890c;
+  --ok:#26890c; --bad:#e21b3c; --gold:#ffc107; --radius:14px;
+  --font:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{font-family:var(--font);background:radial-gradient(1200px 600px at 20% -10%,#6a35c9 0%,var(--bg) 45%,var(--bg2) 100%);color:#fff;min-height:100vh;-webkit-text-size-adjust:100%}
+button{font-family:inherit;cursor:pointer;border:0}
+input,textarea,select{font-family:inherit;font-size:16px}
+.screen{display:none;min-height:100vh;padding:16px}
+.screen.on{display:block}
+.wrap{max-width:1000px;margin:0 auto}
+.narrow{max-width:460px;margin:0 auto}
+h1,h2,h3{margin:0 0 8px}
+.logo{font-size:40px;font-weight:900;letter-spacing:1px;text-align:center;margin:40px 0 6px;text-shadow:0 4px 0 rgba(0,0,0,.25)}
+.tag{text-align:center;opacity:.85;margin-bottom:28px}
+.card{background:var(--card);color:var(--ink);border-radius:var(--radius);padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.card+.card{margin-top:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:10px;font-weight:700;font-size:16px;background:#fff;color:var(--ink);box-shadow:0 4px 0 rgba(0,0,0,.18);transition:transform .08s}
+.btn:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.18)}
+.btn.big{width:100%;padding:16px;font-size:20px}
+.btn.primary{background:#333;color:#fff}
+.btn.green{background:var(--ok);color:#fff}
+.btn.red{background:var(--bad);color:#fff}
+.btn.ghost{background:transparent;color:#fff;box-shadow:none;border:2px solid rgba(255,255,255,.5)}
+.btn.sm{padding:8px 12px;font-size:14px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row.between{justify-content:space-between}
+.field{display:block;margin:10px 0}
+.field span{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+.field input,.field textarea,.field select{width:100%;padding:12px;border:2px solid #ddd;border-radius:10px;color:var(--ink);background:#fff}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--bg)}
+.pin-input{font-size:28px;letter-spacing:6px;text-align:center;font-weight:800}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.pill{background:rgba(255,255,255,.15);padding:6px 12px;border-radius:999px;font-size:14px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#111;color:#fff;padding:12px 18px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:99;max-width:90vw;text-align:center}
+.toast.on{opacity:1}
+
+/* 老師：測驗列表 */
+.quiz-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.quiz-card{background:#fff;color:var(--ink);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px}
+.quiz-card h3{font-size:18px}
+.quiz-card .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+.quiz-card .actions .btn{box-shadow:none;background:#f1eefb}
+
+/* 編輯器 */
+.qbox{background:#f7f5fc;border-radius:12px;padding:14px;margin-top:12px;border-left:6px solid var(--bg)}
+.qbox .opts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.opt-in{display:flex;align-items:center;gap:8px;border-radius:10px;padding:8px 10px;color:#fff}
+.opt-in input[type=text]{flex:1;border:0;border-radius:6px;padding:8px;background:rgba(255,255,255,.92);color:var(--ink)}
+.opt-in input[type=radio]{width:20px;height:20px;accent-color:#fff}
+.opt-in .shape{font-size:18px;width:22px;text-align:center}
+.qhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.qhead input[type=text]{flex:1;min-width:200px;padding:10px;border:2px solid #ddd;border-radius:8px}
+.qhead select{padding:10px;border:2px solid #ddd;border-radius:8px;background:#fff}
+.icon-btn{background:#fff;border:1px solid #ddd;border-radius:8px;padding:6px 10px;font-size:14px}
+
+/* 主持端 */
+.pin-big{font-size:72px;font-weight:900;letter-spacing:6px;line-height:1;text-shadow:0 5px 0 rgba(0,0,0,.25)}
+.lobby{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+@media(max-width:760px){.lobby{grid-template-columns:1fr}}
+#qr{background:#fff;padding:10px;border-radius:12px;display:inline-block}
+#qr img,#qr canvas{display:block}
+.players{display:flex;flex-wrap:wrap;gap:8px}
+.player-chip{background:#fff;color:var(--ink);padding:8px 14px;border-radius:999px;font-weight:700;animation:pop .25s}
+.player-chip.off{opacity:.45;text-decoration:line-through}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.qtitle{background:#fff;color:var(--ink);border-radius:var(--radius);padding:26px;font-size:clamp(22px,4vw,40px);font-weight:800;text-align:center;min-height:120px;display:flex;align-items:center;justify-content:center}
+.stat{display:flex;justify-content:space-between;align-items:center;margin:16px 0}
+.timer{width:92px;height:92px;border-radius:50%;background:#fff;color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:900}
+.timer.hot{background:var(--bad);color:#fff;animation:beat .5s infinite alternate}
+@keyframes beat{to{transform:scale(1.08)}}
+.answered{font-size:22px;font-weight:800;text-align:center}
+.answered b{font-size:40px;display:block}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.ans{border-radius:12px;padding:22px 18px;color:#fff;font-size:clamp(18px,2.6vw,28px);font-weight:800;display:flex;align-items:center;gap:14px;min-height:88px;box-shadow:0 5px 0 rgba(0,0,0,.25);position:relative;text-align:left}
+.ans .shape{font-size:1.3em}
+.ans.dim{opacity:.3}
+.ans .mark{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:1.4em}
+.bars{display:flex;gap:16px;align-items:flex-end;height:200px;margin:10px 0 6px;padding:0 8px}
+.bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bar .col{width:100%;border-radius:8px 8px 0 0;transition:height .6s;min-height:4px;display:flex;align-items:flex-start;justify-content:center;padding-top:6px;font-weight:900;font-size:22px}
+.bar .lbl{margin-top:6px;font-size:22px}
+.board{background:#fff;color:var(--ink);border-radius:var(--radius);overflow:hidden}
+.board .line{display:flex;align-items:center;gap:14px;padding:14px 18px;font-size:22px;font-weight:800;border-bottom:1px solid #eee;animation:slide .4s both}
+.board .line:nth-child(2){animation-delay:.1s}.board .line:nth-child(3){animation-delay:.2s}.board .line:nth-child(4){animation-delay:.3s}.board .line:nth-child(5){animation-delay:.4s}
+@keyframes slide{from{opacity:0;transform:translateX(-30px)}to{opacity:1;transform:none}}
+.board .rank{width:36px;text-align:center;color:var(--muted)}
+.board .name{flex:1}
+.board .pts{font-variant-numeric:tabular-nums}
+.podium{display:flex;gap:12px;align-items:flex-end;justify-content:center;margin:30px 0;height:300px}
+.pod{width:min(28vw,200px);text-align:center;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.pod .who{font-size:clamp(16px,2.5vw,26px);font-weight:900;margin-bottom:8px;word-break:break-all}
+.pod .score{opacity:.9;font-size:14px;margin-bottom:8px}
+.pod .block{border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:900;color:var(--ink);animation:rise .8s both}
+.pod.p1 .block{height:200px;background:var(--gold)}
+.pod.p2 .block{height:140px;background:#cfd8dc;animation-delay:.3s}
+.pod.p3 .block{height:100px;background:#d7a16b;animation-delay:.6s}
+@keyframes rise{from{transform:translateY(100%);opacity:0}to{transform:none;opacity:1}}
+.controls{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+
+/* 學生端 */
+.p-ans{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.p-btn{border-radius:14px;min-height:min(28vh,170px);color:#fff;font-size:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;box-shadow:0 6px 0 rgba(0,0,0,.25);padding:10px}
+.p-btn small{font-size:15px;font-weight:700;line-height:1.3;word-break:break-all}
+.p-btn:active{transform:translateY(3px);box-shadow:0 3px 0 rgba(0,0,0,.25)}
+.p-btn.picked{outline:5px solid #fff}
+.center{text-align:center}
+.feedback{text-align:center;padding:40px 16px;border-radius:var(--radius);animation:pop .3s}
+.feedback.ok{background:var(--ok)}
+.feedback.bad{background:var(--bad)}
+.feedback h2{font-size:38px}
+.feedback .pts{font-size:60px;font-weight:900}
+.pbar{height:10px;background:rgba(255,255,255,.25);border-radius:5px;overflow:hidden;margin:14px 0}
+.pbar i{display:block;height:100%;background:#fff;transition:width 1s linear}
+.wait-dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:#fff;margin:0 4px;animation:blink 1.2s infinite}
+.wait-dot:nth-child(2){animation-delay:.2s}.wait-dot:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.help{font-size:14px;opacity:.85;line-height:1.7}
+.help code{background:rgba(255,255,255,.15);padding:2px 6px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<!-- ===== 首頁 ===== -->
+<section id="home" class="screen on">
+  <div class="narrow">
+    <div class="logo">⚡ 搶答大作戰</div>
+    <div class="tag">老師主持、學生手機作答的課堂搶答遊戲</div>
+    <div class="card">
+      <h2>我是學生</h2>
+      <label class="field"><span>遊戲 PIN 碼</span><input id="joinPin" class="pin-input" inputmode="numeric" maxlength="6" placeholder="000000"></label>
+      <label class="field"><span>暱稱（最多 12 字）</span><input id="joinName" maxlength="12" placeholder="例如：小明"></label>
+      <button class="btn big primary" id="btnJoin">加入遊戲</button>
+      <p id="joinMsg" class="small muted" style="margin:10px 0 0"></p>
+    </div>
+    <div class="card">
+      <h2>我是老師</h2>
+      <p class="muted small">建立題庫、主持遊戲、看即時統計。題庫存在這台電腦的瀏覽器裡。</p>
+      <button class="btn big" id="btnTeacher">進入老師後台</button>
+    </div>
+    <p class="help center">免安裝、免帳號。老師電腦投影到大螢幕，學生掃 QR Code 或輸入 PIN 即可加入。</p>
+  </div>
+</section>
+
+<!-- ===== 老師後台 ===== -->
+<section id="teacher" class="screen">
+  <div class="wrap">
+    <div class="topbar">
+      <h1>📚 我的題庫</h1>
+      <div class="row">
+        <button class="btn sm" id="btnNewQuiz">＋ 新增測驗</button>
+        <button class="btn sm" id="btnImport">匯入 JSON</button>
+        <input type="file" id="fileImport" accept=".json,application/json" hidden>
+        <button class="btn sm ghost" data-go="home">← 回首頁</button>
+      </div>
+    </div>
+    <div id="quizList" class="quiz-list"></div>
+  </div>
+</section>
+
+<!-- ===== 編輯器 ===== -->
+<section id="editor" class="screen">
+  <div class="wrap">
+    <div class="topbar">
+      <h1>✏️ 編輯測驗</h1>
+      <div class="row">
+        <button class="btn sm green" id="btnSaveQuiz">儲存</button>
+        <button class="btn sm ghost" id="btnCancelEdit">取消</button>
+      </div>
+    </div>
+    <div class="card">
+      <label class="field"><span>測驗名稱</span><input id="edTitle" placeholder="例如：國一地理 第三章 複習"></label>
+      <div id="edQuestions"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn sm" id="btnAddQ">＋ 新增題目</button>
+        <button class="btn sm" id="btnBulk">📋 批次貼上題目</button>
+      </div>
+      <div id="bulkBox" style="display:none;margin-top:12px">
+        <label class="field"><span>每行一題，格式：<code>題目 | 選項A | 選項B | 選項C | 選項D | 正確選項(1-4) | 秒數</code>（選項可只填 2～4 個，秒數可省略）。可以請 AI 幫你依這個格式出題再貼進來。</span>
+        <textarea id="bulkText" rows="6" placeholder="台灣最高的山？ | 玉山 | 雪山 | 合歡山 | 阿里山 | 1 | 20"></textarea></label>
+        <button class="btn sm primary" id="btnBulkAdd">加入這些題目</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 主持端 ===== -->
+<section id="host" class="screen">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="row"><span class="pill" id="hTitle"></span><span class="pill" id="hProgress"></span></div>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="optPhoneText" checked> 手機也顯示題目</label>
+        <label class="chk"><input type="checkbox" id="optSound" checked> 音效</label>
+        <button class="btn sm ghost" id="btnEndGame">結束遊戲</button>
+      </div>
+    </div>
+    <div id="hostBody"></div>
+  </div>
+</section>
+
+<!-- ===== 學生端 ===== -->
+<section id="player" class="screen">
+  <div class="narrow">
+    <div class="topbar">
+      <span class="pill" id="pName"></span>
+      <span class="pill" id="pScore">0 分</span>
+    </div>
+    <div id="playerBody"></div>
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   搶答大作戰 — 單檔、無後端。老師瀏覽器 = 遊戲主機（PeerJS/WebRTC）
+   ============================================================ */
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const PREFIX  = 'quizrush-tw-';
+const COLORS  = ['var(--c0)','var(--c1)','var(--c2)','var(--c3)'];
+const SHAPES  = ['▲','◆','●','■'];
+const LS_KEY  = 'quizrush.quizzes.v1';
+const BASE_PTS = 1000;
+
+function toast(msg, ms=2600){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),ms); }
+function show(id){ $$('.screen').forEach(s=>s.classList.toggle('on', s.id===id)); window.scrollTo(0,0); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function uid(){ return Math.random().toString(36).slice(2,10); }
+$$('[data-go]').forEach(b=>b.onclick=()=>show(b.dataset.go));
+
+/* ---------- 音效（Web Audio，無外部檔案） ---------- */
+let actx=null;
+function tone(freq, dur=.12, type='sine', vol=.25, when=0){
+  if(!$('#optSound')?.checked && location.hash!=='#player') return;
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type=type; o.frequency.value=freq; g.gain.value=vol;
+    o.connect(g); g.connect(actx.destination);
+    const t=actx.currentTime+when; o.start(t); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.001,t+dur); o.stop(t+dur+.02);
+  }catch(e){}
+}
+const SFX={
+  tick:()=>tone(880,.06,'square',.12),
+  go:()=>{tone(523,.1);tone(659,.1,'sine',.25,.1);tone(784,.2,'sine',.25,.2);},
+  reveal:()=>{tone(392,.12);tone(523,.25,'sine',.25,.12);},
+  join:()=>tone(1046,.08,'triangle',.12),
+  ok:()=>{tone(659,.1);tone(880,.1,'sine',.25,.1);tone(1319,.25,'sine',.25,.2);},
+  bad:()=>tone(160,.4,'sawtooth',.15),
+  fanfare:()=>{[523,659,784,1046].forEach((f,i)=>tone(f,.25,'triangle',.25,i*.15));},
+};
+
+/* ---------- 題庫 ---------- */
+function sampleQuiz(){
+  return { id:uid(), title:'範例：台灣小常識', questions:[
+    {q:'台灣最高的山是哪一座？', opts:['玉山','雪山','合歡山','阿里山'], ans:0, limit:20},
+    {q:'台灣目前有幾個直轄市？', opts:['4 個','5 個','6 個','7 個'], ans:2, limit:20},
+    {q:'下列哪一個是位於台南的古蹟？', opts:['台北 101','赤崁樓','日月潭','太魯閣'], ans:1, limit:20},
+    {q:'台灣的國際電話國碼是？', opts:['+81','+86','+886','+852'], ans:2, limit:15},
+    {q:'「夜市」最常見的英文說法是？', opts:['Night Market','Dark Store','Evening Mall','Late Shop'], ans:0, limit:15},
+  ]};
+}
+let quizzes = loadQuizzes();
+function loadQuizzes(){ try{ const q=JSON.parse(localStorage.getItem(LS_KEY)); if(Array.isArray(q)) return q; }catch(e){} return [sampleQuiz()]; }
+function saveQuizzes(){ localStorage.setItem(LS_KEY, JSON.stringify(quizzes)); }
+
+function renderQuizList(){
+  const box=$('#quizList');
+  if(!quizzes.length){ box.innerHTML='<div class="card">還沒有測驗，按「新增測驗」開始吧。</div>'; return; }
+  box.innerHTML = quizzes.map(q=>`
+    <div class="quiz-card">
+      <h3>${esc(q.title)||'（未命名）'}</h3>
+      <div class="muted small">${q.questions.length} 題 · 約 ${Math.ceil(q.questions.reduce((a,b)=>a+(b.limit||20)+12,0)/60)} 分鐘</div>
+      <button class="btn green" data-play="${q.id}" ${q.questions.length?'':'disabled'}>▶ 開始遊戲</button>
+      <div class="actions">
+        <button class="btn sm" data-edit="${q.id}">編輯</button>
+        <button class="btn sm" data-dup="${q.id}">複製</button>
+        <button class="btn sm" data-export="${q.id}">匯出</button>
+        <button class="btn sm" data-del="${q.id}" style="color:var(--bad)">刪除</button>
+      </div>
+    </div>`).join('');
+  box.onclick=e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    const find=id=>quizzes.find(q=>q.id===id);
+    if(b.dataset.play) startHost(find(b.dataset.play));
+    if(b.dataset.edit) openEditor(find(b.dataset.edit));
+    if(b.dataset.dup){ const q=JSON.parse(JSON.stringify(find(b.dataset.dup))); q.id=uid(); q.title+='（複製）'; quizzes.push(q); saveQuizzes(); renderQuizList(); }
+    if(b.dataset.export){ const q=find(b.dataset.export); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(q,null,2)],{type:'application/json'})); a.download=(q.title||'quiz')+'.json'; a.click(); }
+    if(b.dataset.del){ const q=find(b.dataset.del); if(confirm(`確定刪除「${q.title}」？`)){ quizzes=quizzes.filter(x=>x!==q); saveQuizzes(); renderQuizList(); } }
+  };
+}
+$('#btnTeacher').onclick=()=>{ renderQuizList(); show('teacher'); };
+$('#btnNewQuiz').onclick=()=>openEditor({id:uid(), title:'', questions:[blankQ()]}, true);
+$('#btnImport').onclick=()=>$('#fileImport').click();
+$('#fileImport').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{ const q=JSON.parse(await f.text()); const arr=Array.isArray(q)?q:[q];
+    for(const x of arr){ if(!x.questions) throw 0; x.id=uid(); quizzes.push(x); }
+    saveQuizzes(); renderQuizList(); toast(`已匯入 ${arr.length} 份測驗`); }
+  catch(err){ toast('匯入失敗：不是有效的測驗 JSON'); }
+  e.target.value='';
+};
+
+/* ---------- 編輯器 ---------- */
+let editing=null, editingIsNew=false;
+function blankQ(){ return {q:'', opts:['','','',''], ans:0, limit:20}; }
+function openEditor(quiz, isNew=false){
+  editing=JSON.parse(JSON.stringify(quiz)); editingIsNew=isNew;
+  editing.questions.forEach(q=>{ while(q.opts.length<4) q.opts.push(''); });
+  $('#edTitle').value=editing.title; renderEditorQs(); $('#bulkBox').style.display='none'; show('editor');
+}
+function renderEditorQs(){
+  $('#edQuestions').innerHTML = editing.questions.map((q,i)=>`
+    <div class="qbox" data-i="${i}">
+      <div class="qhead">
+        <b>第 ${i+1} 題</b>
+        <input type="text" data-f="q" value="${esc(q.q)}" placeholder="輸入題目…">
+        <select data-f="limit">${[5,10,15,20,30,45,60,90].map(s=>`<option value="${s}" ${s==q.limit?'selected':''}>${s} 秒</option>`).join('')}</select>
+        <button class="icon-btn" data-up="${i}" title="上移">↑</button>
+        <button class="icon-btn" data-down="${i}" title="下移">↓</button>
+        <button class="icon-btn" data-rm="${i}" title="刪除" style="color:var(--bad)">✕</button>
+      </div>
+      <div class="opts">
+        ${q.opts.map((o,k)=>`<label class="opt-in" style="background:${COLORS[k]}">
+          <span class="shape">${SHAPES[k]}</span>
+          <input type="text" data-opt="${k}" value="${esc(o)}" placeholder="選項 ${k+1}${k>=2?'（可留空）':''}">
+          <input type="radio" name="ans${i}" value="${k}" ${q.ans==k?'checked':''} title="正確答案">
+        </label>`).join('')}
+      </div>
+      <div class="small muted" style="margin-top:6px">點選項右側的圓鈕標記正確答案。</div>
+    </div>`).join('');
+  const box=$('#edQuestions');
+  box.oninput=e=>{
+    const qb=e.target.closest('.qbox'); if(!qb) return; const q=editing.questions[+qb.dataset.i];
+    if(e.target.dataset.f==='q') q.q=e.target.value;
+    if(e.target.dataset.f==='limit') q.limit=+e.target.value;
+    if(e.target.dataset.opt!==undefined) q.opts[+e.target.dataset.opt]=e.target.value;
+    if(e.target.type==='radio') q.ans=+e.target.value;
+  };
+  box.onclick=e=>{
+    const b=e.target.closest('button'); if(!b) return; const qs=editing.questions;
+    if(b.dataset.rm!==undefined){ qs.splice(+b.dataset.rm,1); if(!qs.length) qs.push(blankQ()); }
+    if(b.dataset.up!==undefined && +b.dataset.up>0){ const i=+b.dataset.up; [qs[i-1],qs[i]]=[qs[i],qs[i-1]]; }
+    if(b.dataset.down!==undefined && +b.dataset.down<qs.length-1){ const i=+b.dataset.down; [qs[i+1],qs[i]]=[qs[i],qs[i+1]]; }
+    renderEditorQs();
+  };
+}
+$('#btnAddQ').onclick=()=>{ editing.questions.push(blankQ()); renderEditorQs(); setTimeout(()=>{ const last=$$('.qbox').pop(); last?.scrollIntoView({behavior:'smooth'}); last?.querySelector('[data-f=q]').focus(); },50); };
+$('#btnBulk').onclick=()=>{ const b=$('#bulkBox'); b.style.display=b.style.display==='none'?'block':'none'; };
+$('#btnBulkAdd').onclick=()=>{
+  const lines=$('#bulkText').value.split('\n').map(l=>l.trim()).filter(Boolean); let n=0;
+  for(const line of lines){
+    const parts=line.split('|').map(s=>s.trim()); if(parts.length<4) continue;
+    const qText=parts[0]; const rest=parts.slice(1);
+    // 從尾端拆出 秒數、正解
+    let limit=20, ans=null;
+    if(rest.length>=4 && /^\d+$/.test(rest[rest.length-1]) && /^\d+$/.test(rest[rest.length-2])){ limit=+rest.pop(); ans=+rest.pop(); }
+    else if(/^\d+$/.test(rest[rest.length-1])){ ans=+rest.pop(); }
+    if(ans===null||ans<1||ans>rest.length||rest.length<2) continue;
+    const opts=rest.slice(0,4); while(opts.length<4) opts.push('');
+    editing.questions.push({q:qText, opts, ans:ans-1, limit:[5,10,15,20,30,45,60,90].includes(limit)?limit:20}); n++;
+  }
+  if(editing.questions.length>1 && !editing.questions[0].q && editing.questions[0].opts.every(o=>!o)) editing.questions.shift();
+  $('#bulkText').value=''; renderEditorQs(); toast(n?`已加入 ${n} 題`:'沒有讀到有效的題目，請檢查格式');
+};
+$('#btnSaveQuiz').onclick=()=>{
+  editing.title=$('#edTitle').value.trim()||'未命名測驗';
+  for(let i=0;i<editing.questions.length;i++){
+    const q=editing.questions[i]; q.q=q.q.trim(); q.opts=q.opts.map(o=>o.trim());
+    if(!q.q){ toast(`第 ${i+1} 題還沒有題目`); return; }
+    const ansText=q.opts[q.ans];
+    const kept=q.opts.filter(Boolean);
+    if(kept.length<2){ toast(`第 ${i+1} 題至少要有 2 個選項`); return; }
+    if(!ansText){ toast(`第 ${i+1} 題的正確答案是空白選項`); return; }
+    q.opts=kept; q.ans=kept.indexOf(ansText);
+  }
+  const idx=quizzes.findIndex(q=>q.id===editing.id);
+  if(idx>=0) quizzes[idx]=editing; else quizzes.push(editing);
+  saveQuizzes(); renderQuizList(); show('teacher'); toast('已儲存');
+};
+$('#btnCancelEdit').onclick=()=>{ if(confirm('放棄這次的修改？')) show('teacher'); };
+
+/* ============================================================
+   主持端（老師）
+   ============================================================ */
+let H=null;
+function startHost(quiz){
+  if(H) destroyHost();
+  H={ quiz, pin:null, peer:null, players:{}, qi:-1, phase:'lobby', answers:{}, startAt:0, timer:null, ticker:null };
+  $('#hTitle').textContent=quiz.title; $('#hProgress').textContent='大廳';
+  $('#hostBody').innerHTML='<div class="card center">正在建立遊戲房間…</div>'; show('host');
+  openHostPeer();
+}
+function destroyHost(){ if(!H) return; clearInterval(H.timer); clearTimeout(H.ticker); broadcast({t:'kicked'}); setTimeout(()=>H?.peer?.destroy(),300); H=null; }
+$('#btnEndGame').onclick=()=>{ if(confirm('結束這場遊戲並回到題庫？')){ destroyHost(); renderQuizList(); show('teacher'); } };
+
+function openHostPeer(){
+  const pin=String(Math.floor(100000+Math.random()*900000));
+  const peer=new Peer(PREFIX+pin,{debug:0});
+  peer.on('open',()=>{ if(!H) return peer.destroy(); H.pin=pin; H.peer=peer; renderLobby(); });
+  peer.on('error',e=>{
+    if(e.type==='unavailable-id'){ peer.destroy(); openHostPeer(); return; }
+    if(e.type==='peer-unavailable') return;
+    console.warn(e); toast('連線服務發生問題：'+e.type+'（請確認網路後重新開始）',4000);
+  });
+  peer.on('disconnected',()=>{ try{ peer.reconnect(); }catch(err){} });
+  peer.on('connection',conn=>{
+    conn.on('data',d=>onHostData(conn,d));
+    conn.on('close',()=>onPlayerLeave(conn));
+    conn.on('error',()=>onPlayerLeave(conn));
+  });
+}
+const alive=()=>Object.values(H.players).filter(p=>p.on);
+function broadcast(msg){ if(!H) return; Object.values(H.players).forEach(p=>{ if(p.on&&p.conn?.open) try{p.conn.send(msg);}catch(e){} }); }
+function sendTo(p,msg){ if(p.on&&p.conn?.open) try{p.conn.send(msg);}catch(e){} }
+function lobbyPayload(){ return {t:'lobby', players:Object.values(H.players).filter(p=>p.on).map(p=>p.name)}; }
+
+function onHostData(conn,d){
+  if(!H||!d||typeof d!=='object') return;
+  if(d.t==='join'){
+    const name=String(d.name||'').trim().slice(0,12); if(!name) return conn.send({t:'rejected',reason:'暱稱不可空白'});
+    const key=name.toLowerCase(); let p=H.players[key];
+    if(p && p.on && p.conn!==conn && p.conn?.open) return conn.send({t:'rejected',reason:'這個暱稱已經有人用了'});
+    if(!p){ p=H.players[key]={name, score:0, streak:0, answered:{}, conn, on:true}; SFX.join(); }
+    else { p.conn=conn; p.on=true; } // 重新連線，保留分數
+    conn._key=key;
+    conn.send({t:'joined', name:p.name, score:p.score});
+    if(H.phase==='question') sendQuestionTo(p);
+    broadcast(lobbyPayload());
+    if(H.phase==='lobby') renderLobby(); else updateAnsweredCount();
+  }
+  if(d.t==='answer'){
+    const p=H.players[conn._key]; if(!p||H.phase!=='question'||d.qi!==H.qi) return;
+    if(p.answered[H.qi]) return;
+    const cur=H.quiz.questions[H.qi]; const idx=+d.idx; if(!(idx>=0&&idx<cur.opts.length)) return;
+    p.answered[H.qi]={idx, ms:Date.now()-H.startAt};
+    sendTo(p,{t:'ack'});
+    updateAnsweredCount();
+    if(alive().every(x=>x.answered[H.qi])) setTimeout(endQuestion,600);
+  }
+}
+function onPlayerLeave(conn){ if(!H||!conn._key) return; const p=H.players[conn._key]; if(p&&p.conn===conn){ p.on=false; broadcast(lobbyPayload()); if(H.phase==='lobby') renderLobby(); else updateAnsweredCount(); } }
+
+function joinUrl(){ const u=new URL(location.href); u.search=''; u.hash=''; u.searchParams.set('pin',H.pin); return u.toString(); }
+function renderLobby(){
+  const ps=Object.values(H.players);
+  const isFile=location.protocol==='file:';
+  $('#hProgress').textContent='大廳';
+  $('#hostBody').innerHTML=`
+    <div class="lobby">
+      <div class="card center">
+        <div class="muted">學生請到</div>
+        <div style="font-size:18px;font-weight:700;word-break:break-all;margin:4px 0 12px">${isFile?'（請先把這個網頁放到網路上，例如 GitHub Pages，手機才能連）':esc(joinUrl().replace(/^https?:\/\//,'').replace(/\?pin=\d+$/,''))}</div>
+        <div class="muted">輸入遊戲 PIN</div>
+        <div class="pin-big" style="color:var(--ink)">${H.pin}</div>
+        <div style="margin-top:14px"><div id="qr"></div></div>
+        <div class="small muted" style="margin-top:8px">或掃描 QR Code 直接加入</div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="row between"><h2 style="margin:0">已加入 <span id="lobbyCount">${ps.filter(p=>p.on).length}</span> 人</h2>
+            <button class="btn green" id="btnStart" ${ps.some(p=>p.on)?'':'disabled'}>▶ 開始</button></div>
+          <div class="players" style="margin-top:14px" id="lobbyPlayers">${ps.length?ps.map(p=>`<span class="player-chip ${p.on?'':'off'}">${esc(p.name)}</span>`).join(''):'<span class="muted">等待學生加入…</span>'}</div>
+        </div>
+        <p class="help" style="margin-top:12px">提示：想先試玩，用手機或另開一個瀏覽器分頁、輸入 PIN 就能當學生。</p>
+      </div>
+    </div>`;
+  if(!isFile) new QRCode($('#qr'),{text:joinUrl(),width:180,height:180,correctLevel:QRCode.CorrectLevel.M});
+  $('#btnStart').onclick=()=>nextQuestion();
+}
+
+function sendQuestionTo(p){
+  const cur=H.quiz.questions[H.qi]; const showText=$('#optPhoneText').checked;
+  sendTo(p,{t:'question', qi:H.qi, total:H.quiz.questions.length, n:cur.opts.length, limit:cur.limit,
+    remain:Math.max(0,cur.limit*1000-(Date.now()-H.startAt)), q:showText?cur.q:null, opts:showText?cur.opts:null});
+}
+function nextQuestion(){
+  clearInterval(H.timer);
+  H.qi++;
+  if(H.qi>=H.quiz.questions.length) return renderPodium();
+  const cur=H.quiz.questions[H.qi];
+  H.phase='question'; H.startAt=Date.now();
+  $('#hProgress').textContent=`第 ${H.qi+1} / ${H.quiz.questions.length} 題`;
+  Object.values(H.players).forEach(p=>{ if(p.on) sendQuestionTo(p); });
+  SFX.go();
+  $('#hostBody').innerHTML=`
+    <div class="qtitle">${esc(cur.q)}</div>
+    <div class="stat">
+      <div class="timer" id="hTimer">${cur.limit}</div>
+      <div class="answered"><b id="hAnswered">0</b>已作答 / <span id="hTotal">${alive().length}</span> 人</div>
+      <button class="btn" id="btnSkip">跳過倒數 ⏭</button>
+    </div>
+    <div class="grid">${cur.opts.map((o,k)=>`<div class="ans" style="background:${COLORS[k]}"><span class="shape">${SHAPES[k]}</span>${esc(o)}</div>`).join('')}</div>`;
+  $('#btnSkip').onclick=endQuestion;
+  const end=H.startAt+cur.limit*1000;
+  H.timer=setInterval(()=>{
+    const left=Math.max(0,Math.ceil((end-Date.now())/1000)); const el=$('#hTimer'); if(!el) return;
+    if(String(left)!==el.textContent){ el.textContent=left; if(left<=5&&left>0){ el.classList.add('hot'); SFX.tick(); } }
+    if(Date.now()>=end) endQuestion();
+  },200);
+}
+function updateAnsweredCount(){ const a=$('#hAnswered'), t=$('#hTotal'); if(a) a.textContent=alive().filter(p=>p.answered[H.qi]).length; if(t) t.textContent=alive().length; if($('#lobbyCount')){ $('#lobbyCount').textContent=alive().length; } }
+
+function ranked(){ return Object.values(H.players).sort((a,b)=>b.score-a.score); }
+function endQuestion(){
+  if(!H||H.phase!=='question') return;
+  clearInterval(H.timer); H.phase='reveal';
+  const cur=H.quiz.questions[H.qi]; const counts=cur.opts.map(()=>0);
+  Object.values(H.players).forEach(p=>{
+    const a=p.answered[H.qi]; let correct=false, pts=0;
+    if(a){ counts[a.idx]++; correct=a.idx===cur.ans;
+      if(correct){ const frac=Math.min(1,a.ms/(cur.limit*1000)); pts=Math.round(BASE_PTS*(1-frac/2)); p.streak++; pts+=Math.min(p.streak-1,5)*100; }
+      else p.streak=0; }
+    else p.streak=0;
+    p.score+=pts; p.last={correct,pts,answered:!!a};
+  });
+  const order=ranked();
+  order.forEach((p,i)=>sendTo(p,{t:'result', correct:p.last.correct, answered:p.last.answered, pts:p.last.pts, score:p.score, rank:i+1, of:order.length, streak:p.streak, ans:cur.ans}));
+  SFX.reveal();
+  const max=Math.max(1,...counts);
+  $('#hostBody').innerHTML=`
+    <div class="qtitle">${esc(cur.q)}</div>
+    <div class="bars">${counts.map((c,k)=>`<div class="bar"><div class="col" style="background:${COLORS[k]};height:${Math.max(4,c/max*100)}%">${c||''}</div><div class="lbl">${SHAPES[k]}${k===cur.ans?' ✔':''}</div></div>`).join('')}</div>
+    <div class="grid">${cur.opts.map((o,k)=>`<div class="ans ${k===cur.ans?'':'dim'}" style="background:${COLORS[k]}"><span class="shape">${SHAPES[k]}</span>${esc(o)}${k===cur.ans?'<span class="mark">✔</span>':''}</div>`).join('')}</div>
+    <div class="controls"><button class="btn big" id="btnBoard" style="width:auto">排行榜 →</button></div>`;
+  $('#btnBoard').onclick=renderBoard;
+}
+function renderBoard(){
+  const top=ranked().slice(0,5); const last=H.qi>=H.quiz.questions.length-1;
+  $('#hostBody').innerHTML=`
+    <h2 class="center" style="font-size:32px">🏆 排行榜</h2>
+    <div class="board">${top.map((p,i)=>`<div class="line"><span class="rank">${i+1}</span><span class="name">${esc(p.name)}${p.streak>=2?` <span class="small" style="color:#e67e22">🔥 連對 ${p.streak}</span>`:''}</span><span class="pts">${p.score.toLocaleString()}</span></div>`).join('')||'<div class="line">沒有玩家</div>'}</div>
+    <div class="controls"><button class="btn big green" id="btnNext" style="width:auto">${last?'看最終結果 🎉':'下一題 →'}</button></div>`;
+  $('#btnNext').onclick=nextQuestion;
+}
+function renderPodium(){
+  H.phase='end'; $('#hProgress').textContent='結束';
+  const order=ranked();
+  order.forEach((p,i)=>sendTo(p,{t:'end', rank:i+1, of:order.length, score:p.score}));
+  SFX.fanfare();
+  const pod=(p,cls,n)=>p?`<div class="pod ${cls}"><div class="who">${esc(p.name)}</div><div class="score">${p.score.toLocaleString()} 分</div><div class="block">${n}</div></div>`:'';
+  const rows=order.map((p,i)=>`<tr><td style="padding:8px 12px;color:var(--muted)">${i+1}</td><td style="padding:8px 12px">${esc(p.name)}</td><td style="padding:8px 12px;text-align:right">${p.score.toLocaleString()}</td><td style="padding:8px 12px;text-align:right">${H.quiz.questions.filter((q,k)=>p.answered[k]&&p.answered[k].idx===q.ans).length} / ${H.quiz.questions.length}</td></tr>`).join('');
+  $('#hostBody').innerHTML=`
+    <h2 class="center" style="font-size:36px">🎉 ${esc(H.quiz.title)} 完成！</h2>
+    <div class="podium">${pod(order[1],'p2',2)}${pod(order[0],'p1',1)}${pod(order[2],'p3',3)}</div>
+    <div class="card"><h3>全班成績</h3>
+      <table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--muted);font-size:13px"><th style="text-align:left;padding:8px 12px">名次</th><th style="text-align:left;padding:8px 12px">暱稱</th><th style="text-align:right;padding:8px 12px">分數</th><th style="text-align:right;padding:8px 12px">答對題數</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="row" style="margin-top:12px"><button class="btn sm" id="btnCsv">下載成績 CSV</button><button class="btn sm" id="btnAgain">再玩一次（同一批學生）</button><button class="btn sm ghost" style="color:var(--ink);border-color:#ccc" id="btnBack">回題庫</button></div>
+    </div>`;
+  $('#btnCsv').onclick=()=>{
+    const hdr=['名次','暱稱','分數',...H.quiz.questions.map((q,i)=>`第${i+1}題`)];
+    const lines=[hdr.join(',')].concat(order.map((p,i)=>[i+1,`"${p.name.replace(/"/g,'""')}"`,p.score,...H.quiz.questions.map((q,k)=>p.answered[k]?(p.answered[k].idx===q.ans?'O':'X'):'-')].join(',')));
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+lines.join('\n')],{type:'text/csv'})); a.download=`${H.quiz.title}-成績.csv`; a.click();
+  };
+  $('#btnAgain').onclick=()=>{ Object.values(H.players).forEach(p=>{p.score=0;p.streak=0;p.answered={};}); H.qi=-1; H.phase='lobby'; broadcast({t:'restart'}); renderLobby(); };
+  $('#btnBack').onclick=()=>{ destroyHost(); renderQuizList(); show('teacher'); };
+}
+
+/* ============================================================
+   學生端
+   ============================================================ */
+let P=null;
+$('#joinPin').addEventListener('input',e=>e.target.value=e.target.value.replace(/\D/g,'').slice(0,6));
+$('#btnJoin').onclick=()=>{
+  const pin=$('#joinPin').value.trim(), name=$('#joinName').value.trim();
+  if(pin.length!==6) return toast('請輸入 6 位數 PIN');
+  if(!name) return toast('請輸入暱稱');
+  joinGame(pin,name);
+};
+$('#joinName').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#btnJoin').click(); });
+
+function joinGame(pin,name){
+  if(P){ try{P.peer?.destroy();}catch(e){} }
+  P={pin,name,peer:null,conn:null,score:0,qi:null,picked:null,timer:null,cd:null};
+  $('#joinMsg').textContent='連線中…'; $('#btnJoin').disabled=true;
+  const peer=new Peer({debug:0}); P.peer=peer;
+  const fail=msg=>{ $('#joinMsg').textContent=''; $('#btnJoin').disabled=false; toast(msg,3500); try{peer.destroy();}catch(e){} };
+  const guard=setTimeout(()=>fail('連線逾時，請確認 PIN 與網路後再試'),12000);
+  peer.on('open',()=>{
+    const conn=peer.connect(PREFIX+pin,{reliable:true}); P.conn=conn;
+    conn.on('open',()=>{ clearTimeout(guard); conn.send({t:'join',name}); });
+    conn.on('data',onPlayerData);
+    conn.on('close',()=>{ if(P) playerView('lost'); });
+  });
+  peer.on('error',e=>{ clearTimeout(guard); if(e.type==='peer-unavailable') fail('找不到這個 PIN 的遊戲，請確認老師已開啟房間'); else fail('連線錯誤：'+e.type); });
+}
+function onPlayerData(d){
+  if(!P||!d) return;
+  switch(d.t){
+    case 'rejected': toast(d.reason,3500); $('#joinMsg').textContent=''; $('#btnJoin').disabled=false; try{P.peer.destroy();}catch(e){} P=null; break;
+    case 'joined':
+      P.name=d.name; P.score=d.score; sessionStorage.setItem('qr.join',JSON.stringify({pin:P.pin,name:P.name}));
+      $('#pName').textContent=P.name; $('#pScore').textContent=P.score.toLocaleString()+' 分'; $('#joinMsg').textContent=''; $('#btnJoin').disabled=false;
+      location.hash='#player'; show('player'); playerView('wait','你已加入！看大螢幕，等老師開始。'); break;
+    case 'lobby': break;
+    case 'question': P.qi=d.qi; P.picked=null; playerView('answer',d); break;
+    case 'ack': playerView('wait','已送出！等其他同學作答…'); break;
+    case 'result': P.score=d.score; $('#pScore').textContent=P.score.toLocaleString()+' 分'; playerView('result',d); break;
+    case 'end': playerView('end',d); break;
+    case 'restart': P.score=0; $('#pScore').textContent='0 分'; playerView('wait','老師準備再玩一次，請稍候。'); break;
+    case 'kicked': playerView('lost','老師已結束遊戲。'); break;
+  }
+}
+function playerView(kind,data){
+  clearInterval(P?.timer); const body=$('#playerBody');
+  if(kind==='wait'){ body.innerHTML=`<div class="card center" style="padding:48px 20px"><div style="margin-bottom:14px"><span class="wait-dot"></span><span class="wait-dot"></span><span class="wait-dot"></span></div><h2>${esc(data)}</h2></div>`; }
+  if(kind==='answer'){
+    const n=data.n, hasText=!!data.q; const total=data.limit*1000; const end=Date.now()+(data.remain??total);
+    body.innerHTML=`
+      <div class="center small" style="opacity:.8">第 ${data.qi+1} / ${data.total} 題</div>
+      <div class="pbar"><i id="pBar" style="width:100%"></i></div>
+      ${hasText?`<div class="card" style="font-size:18px;font-weight:700;text-align:center;padding:14px">${esc(data.q)}</div>`:''}
+      <div class="p-ans">${Array.from({length:n},(_,k)=>`<button class="p-btn" data-k="${k}" style="background:${COLORS[k]}">${SHAPES[k]}${hasText?`<small>${esc(data.opts[k])}</small>`:''}</button>`).join('')}</div>`;
+    body.querySelectorAll('.p-btn').forEach(b=>b.onclick=()=>{
+      if(P.picked!==null) return; P.picked=+b.dataset.k; b.classList.add('picked');
+      body.querySelectorAll('.p-btn').forEach(x=>x.disabled=true);
+      P.conn.send({t:'answer',qi:P.qi,idx:P.picked});
+      if(navigator.vibrate) navigator.vibrate(30);
+    });
+    P.timer=setInterval(()=>{ const left=Math.max(0,end-Date.now()); const bar=$('#pBar'); if(bar) bar.style.width=(left/total*100)+'%'; if(left<=0){ clearInterval(P.timer); if(P.picked===null) playerView('wait','時間到！看大螢幕公布答案。'); } },200);
+  }
+  if(kind==='result'){
+    const ok=data.correct; if(ok) SFX.ok(); else SFX.bad();
+    body.innerHTML=`<div class="feedback ${ok?'ok':'bad'}">
+      <h2>${!data.answered?'⏰ 沒有作答':ok?'✔ 答對了！':'✘ 答錯了'}</h2>
+      <div class="pts">${ok?'+'+data.pts.toLocaleString():'+0'}</div>
+      ${data.streak>=2?`<div>🔥 連續答對 ${data.streak} 題，加分中！</div>`:''}
+      <div style="margin-top:16px;font-size:18px">目前第 <b>${data.rank}</b> 名（共 ${data.of} 人）</div>
+      <div class="small" style="opacity:.85;margin-top:4px">總分 ${data.score.toLocaleString()}</div>
+    </div>`;
+  }
+  if(kind==='end'){
+    SFX.fanfare();
+    body.innerHTML=`<div class="card center" style="padding:40px 20px">
+      <div style="font-size:60px">${data.rank===1?'🥇':data.rank===2?'🥈':data.rank===3?'🥉':'🎉'}</div>
+      <h2 style="font-size:32px">第 ${data.rank} 名</h2>
+      <div class="muted">共 ${data.of} 人 · ${data.score.toLocaleString()} 分</div>
+      <button class="btn big primary" style="margin-top:24px" onclick="leaveGame()">回首頁</button></div>`;
+  }
+  if(kind==='lost'){
+    body.innerHTML=`<div class="card center" style="padding:40px 20px"><h2>${esc(data||'與老師的連線中斷')}</h2><p class="muted">如果遊戲還在進行，可以用同一個暱稱重新加入，分數會保留。</p>
+      <div class="row" style="justify-content:center"><button class="btn primary" onclick="rejoin()">重新加入</button><button class="btn" onclick="leaveGame()">回首頁</button></div></div>`;
+  }
+}
+function rejoin(){ const s=JSON.parse(sessionStorage.getItem('qr.join')||'null'); if(s){ $('#joinPin').value=s.pin; $('#joinName').value=s.name; show('home'); joinGame(s.pin,s.name); } else leaveGame(); }
+function leaveGame(){ try{P?.peer?.destroy();}catch(e){} P=null; location.hash=''; show('home'); }
+
+/* ---------- 啟動：網址帶 ?pin= 就自動填入 ---------- */
+(function init(){
+  const pin=new URLSearchParams(location.search).get('pin');
+  if(pin){ $('#joinPin').value=pin.replace(/\D/g,'').slice(0,6); setTimeout(()=>$('#joinName').focus(),100); }
+  const s=JSON.parse(sessionStorage.getItem('qr.join')||'null'); if(s&&!pin){ $('#joinPin').value=s.pin; $('#joinName').value=s.name; }
+  if(typeof Peer==='undefined'){ toast('連線元件載入失敗，請檢查網路後重新整理',6000); }
+})();
+window.addEventListener('beforeunload',e=>{ if(H&&H.phase!=='lobby'&&H.phase!=='end'){ e.preventDefault(); e.returnValue=''; } });
+
+/* 錯誤回報按鈕縮小成角落小圖示 */
+window.addEventListener('load',()=>{
+  const host=document.querySelector('[data-oth-report]'); if(!host||!host.shadowRoot) return;
+  const st=document.createElement('style');
+  st.textContent=`.fab{width:34px;height:34px;padding:0;gap:0;justify-content:center;font-size:0;opacity:.72;right:14px;
+      box-shadow:0 2px 8px rgba(0,0,0,.14),0 0 0 1.5px #46178f inset;transition:opacity .2s}
+    .fab:hover,.fab:focus-visible{opacity:1;width:auto;padding:0 12px;gap:6px;font-size:12.5px}
+    .fab svg{width:15px;height:15px}
+    @media (max-width:900px){.fab{bottom:calc(74px + env(safe-area-inset-bottom,0px));right:10px}}`;
+  host.shadowRoot.appendChild(st);
+  const fab=host.shadowRoot.querySelector('.fab'); if(fab){fab.title='回報錯誤或建議';fab.setAttribute('aria-label','回報錯誤或建議');}
+});
+</script>
+<script src="https://mattsue1003.github.io/oth-report-button/report.js" data-site="搶答大作戰" data-color="#46178f" data-label="錯誤／建議" data-offset="16" defer></script>
+</body>
+</html>
