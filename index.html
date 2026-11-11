@@ -1892,6 +1892,8 @@ function leaveGame(){ if(P){ P.dead=true; clearTimeout(P.retryT); clearInterval(
     $('#btnResume').onclick=()=>{ b.classList.add('hidden'); ctx(); restoreHost(sh); };
     $('#btnDiscard').onclick=()=>{ sessionStorage.removeItem(SS_HOST); b.classList.add('hidden'); };
   }
+  // ?host：從教室螢幕等處開啟時直接進老師後台（有未結束的遊戲時留在首頁，讓老師選擇恢復）
+  if(params.has('host')&&!sh&&!sj){ renderQuizList(); show('teacher'); }
   if(location.hash.startsWith('#quiz=')){
     try{ const z=normQuiz(await readShared(location.hash.slice(6))); history.replaceState(null,'',location.pathname);
       if(confirm(`要把分享的測驗「${z.title}」（${z.questions.length} 題）加入你的題庫嗎？`)){ z.id=uid(); quizzes.push(z); saveQuizzes(); renderQuizList(); show('teacher'); toast('已加入題庫'); } }
